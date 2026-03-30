@@ -31,17 +31,25 @@ st.markdown("""
 
 # --- Data Caching Functions ---
 @st.cache_data(show_spinner=False)
-def load_data_and_rules():
-    df = recommender.load_dataset('dataset/Groceries_dataset.csv')
+def load_data_and_rules(data_source):
+    df = recommender.load_dataset(data_source)
     freq = recommender.get_item_frequencies(df)
     unique_items = df['itemDescription'].unique() if not df.empty else []
     # Using low metrics for fast initialization
     rules = recommender.build_association_rules(df, min_support=0.001, min_confidence=0.05)
     return df, freq, unique_items, rules
 
+# --- Initializing Session State ---
+if 'user_input' not in st.session_state:
+    st.session_state['user_input'] = ""
+if 'shopping_list' not in st.session_state:
+    st.session_state['shopping_list'] = set()
+if 'data_source' not in st.session_state:
+    st.session_state['data_source'] = 'dataset/Groceries_dataset.csv'
+
 # Load backend elements efficiently
 with st.spinner("Initializing AI Engine and loading context rules..."):
-    df, freq_series, vocab, association_rules = load_data_and_rules()
+    df, freq_series, vocab, association_rules = load_data_and_rules(st.session_state['data_source'])
 
 # --- Application Layout ---
 st.title("🛒 Smart Grocery List Generator")
@@ -59,6 +67,23 @@ with st.sidebar:
     smart_mode = st.toggle("Brain Mode (Advanced NLP)", value=True, help="Toggle AI Semantic understanding.")
     enable_recommendations = st.toggle("Enable Smart Recommendations", value=True)
     enable_synonyms = st.toggle("Enable Synonym Expansion", value=True)
+    
+    st.divider()
+    
+    st.subheader("📁 Custom Dataset Training")
+    uploaded_file = st.file_uploader("Upload CSV (Member_number, Date, itemDescription)", type=["csv"])
+    if uploaded_file is not None:
+        if st.button("Start Training on New Data", type="primary"):
+            st.session_state['data_source'] = uploaded_file
+            st.cache_data.clear() # Wipe cache so Apriori rules strictly regenerate
+            st.rerun()
+            
+    if st.session_state['data_source'] != 'dataset/Groceries_dataset.csv':
+        st.success("Currently running on Custom Dataset!")
+        if st.button("Reset to Default Database"):
+            st.session_state['data_source'] = 'dataset/Groceries_dataset.csv'
+            st.cache_data.clear()
+            st.rerun()
     
     st.divider()
     
@@ -136,7 +161,8 @@ if submit_btn and user_text.strip():
                 avg_confidence = 1.0 # Literal matches are 100%
             
             # Save matched to session list to persist state during interaction
-            st.session_state['shopping_list'].update(final_matched_items)
+            # We explicitly overwrite it here so only the currently matched items show up
+            st.session_state['shopping_list'] = set(final_matched_items)
             
             # 3. Generating Recommendations
             recommendations = []

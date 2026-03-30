@@ -87,6 +87,8 @@ def expand_synonyms(word, dataset_vocabulary=None):
         # Check if the synonym has a partial match in the dataset vocab
         relevant_synonyms = set()
         for syn in synonyms:
+            if len(syn) <= 2:
+                continue # Prevent single-letter lemmas (like 'c' for cold) from matching everything
             for vocab_item in dataset_vocabulary:
                 if syn in vocab_item or vocab_item in syn:
                     relevant_synonyms.add(vocab_item)
