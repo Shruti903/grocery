@@ -14,6 +14,9 @@ def load_dataset(filepath):
     Loads the grocery dataset and immediately FILTERS OUT non-food related items.
     """
     try:
+        if hasattr(filepath, 'seek'):
+            filepath.seek(0)
+            
         df = pd.read_csv(filepath)
         
         # Filter logic to remove non-edible categories
