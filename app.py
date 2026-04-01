@@ -60,6 +60,8 @@ if 'user_input' not in st.session_state:
     st.session_state['user_input'] = ""
 if 'shopping_list' not in st.session_state:
     st.session_state['shopping_list'] = set()
+if 'num_people' not in st.session_state:
+    st.session_state['num_people'] = 1
 
 # --- Sidebar Configuration ---
 with st.sidebar:
@@ -113,16 +115,29 @@ with col1:
         height=150
     )
     
+    # Allow manual override for number of people
+    st.session_state['num_people'] = st.number_input(
+        "👥 How many people are you shopping for?", 
+        min_value=1, max_value=100, 
+        value=st.session_state.get('num_people', 1),
+        step=1,
+        help="Specify the number of people to scale the list quantities automatically."
+    )
+    
     col_submit, col_clear = st.columns([1, 4])
     submit_btn = col_submit.button("Generate List", type="primary", use_container_width=True)
     if col_clear.button("Clear Input", use_container_width=True):
         st.session_state['user_input'] = ""
         st.session_state['shopping_list'] = set()
+        st.session_state['num_people'] = 1
         st.rerun()
 
 if submit_btn and user_text.strip():
     with st.spinner("Analyzing intent and building list..."):
         try:
+            # We explicitly use the number_input above for num_people now.
+            
+
             # 1. Preprocessing
             clean_text = preprocessing.clean_text(user_text)
             intents = preprocessing.detect_intent(clean_text)
@@ -207,7 +222,8 @@ if submit_btn and user_text.strip():
             shop_col, act_col = st.columns([1.5, 1])
             
             with shop_col:
-                st.subheader("📋 Your Digital Grocery List")
+                num_people = st.session_state.get('num_people', 1)
+                st.subheader(f"📋 Your Digital Grocery List (Quantity for {num_people} {'person' if num_people == 1 else 'people'})")
                 
                 # We use a set form rendering to manage interactive checkboxes 
                 # meaning "Shopping Mode"
@@ -217,9 +233,13 @@ if submit_btn and user_text.strip():
                 if not sorted_items:
                     st.info("No concrete items detected matching our catalog. Try being specific (e.g., 'Apple', 'Milk').")
                 
+                # Calculate quantities
+                quantities = nlp_utils.calculate_quantities(sorted_items, num_people)
+                
                 check_status = {}
                 for idx, item in enumerate(sorted_items):
-                    check_status[item] = st.checkbox(f"{item.capitalize()}", key=f"item_{idx}")
+                    item_display = f"{item.capitalize()} - {quantities.get(item, 'as required')}"
+                    check_status[item] = st.checkbox(item_display, key=f"item_{idx}")
                     
                 checked_items = [k for k, v in check_status.items() if v]
                 if st.button("Mark Selected as Purchased (Remove)"):
@@ -250,9 +270,15 @@ if submit_btn and user_text.strip():
             st.divider()
             if st.session_state['shopping_list']:
                 csv_data = StringIO()
-                csv_data.write("Item,Purchased\n")
-                for item in list(st.session_state['shopping_list']):
-                    csv_data.write(f"{item.capitalize()},False\n")
+                csv_data.write("Item,Quantity,Purchased\n")
+                
+                # Ensure quantities are calculated for export
+                num_people = st.session_state.get('num_people', 1)
+                all_display_items = list(st.session_state['shopping_list'])
+                quantities = nlp_utils.calculate_quantities(all_display_items, num_people)
+                
+                for item in all_display_items:
+                    csv_data.write(f"{item.capitalize()},{quantities.get(item, 'as required')},False\n")
                 st.download_button(
                     label="📤 Export Groceries to CSV",
                     data=csv_data.getvalue(),

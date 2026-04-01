@@ -129,3 +129,122 @@ def semantic_match(user_items, dataset_items, threshold=0.2):
                 matches[best_match] = round(best_score, 2)
                 
     return matches
+
+def extract_number_of_people(text):
+    """
+    Extracts the number of people from the input text using regex.
+    Defaults to 1 if not found.
+    Handles numeric digits and optionally written numbers like "two", "three".
+    """
+    if not isinstance(text, str):
+        return 1
+        
+    text_lower = text.lower()
+    
+    # Match digits followed by variations of people/person/guest
+    match_digits = re.search(r'(\d+)\s*(people|persons|person|guests?)', text_lower)
+    if match_digits:
+        return int(match_digits.group(1))
+    
+    # Simple word to number mapping for common small numbers
+    word_to_num = {
+        'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 
+        'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+    }
+    for word, num in word_to_num.items():
+        if re.search(fr'\b{word}\b\s*(people|persons|person|guests?)', text_lower):
+            return num
+            
+    return 1
+
+# Base quantities for common ingredients per person
+BASE_QUANTITIES = {
+    # Starters/Staples
+    "pasta": {"amount": 100, "unit": "grams"},
+    "bread": {"amount": 2, "unit": "slices"},
+    "rice": {"amount": 75, "unit": "grams"},
+    "noodles": {"amount": 80, "unit": "grams"},
+    "potato": {"amount": 150, "unit": "grams"},
+    
+    # Vegetables/Fruits
+    "tomato": {"amount": 1, "unit": "unit"},
+    "onion": {"amount": 1, "unit": "half"},
+    "garlic": {"amount": 1, "unit": "clove"},
+    "broccoli": {"amount": 100, "unit": "grams"},
+    "carrots": {"amount": 50, "unit": "grams"},
+    "vegetable": {"amount": 150, "unit": "grams"},
+    "vegetables": {"amount": 150, "unit": "grams"},
+    "fruits": {"amount": 150, "unit": "grams"},
+    "fruit": {"amount": 1, "unit": "unit"},
+    "apple": {"amount": 1, "unit": "unit"},
+    "banana": {"amount": 1, "unit": "unit"},
+    "citrus": {"amount": 1, "unit": "unit"},
+    "salad": {"amount": 100, "unit": "grams"},
+    
+    # Dairy & Proteins
+    "cheese": {"amount": 40, "unit": "grams"},
+    "milk": {"amount": 200, "unit": "ml"},
+    "butter": {"amount": 1, "unit": "tbsp"},
+    "eggs": {"amount": 2, "unit": "units"},
+    "chicken": {"amount": 150, "unit": "grams"},
+    "beef": {"amount": 150, "unit": "grams"},
+    "fish": {"amount": 150, "unit": "grams"},
+    "yogurt": {"amount": 100, "unit": "grams"},
+    
+    # Extras/Condiments
+    "olive oil": {"amount": 1, "unit": "tbsp"},
+    "oil": {"amount": 1, "unit": "tbsp"},
+    "sauce": {"amount": 50, "unit": "ml"},
+    "cereals": {"amount": 50, "unit": "grams"},
+    "juice": {"amount": 200, "unit": "ml"},
+    "pancake": {"amount": 2, "unit": "units"},
+    "sugar": {"amount": 1, "unit": "tsp"},
+    "salt": {"amount": 1, "unit": "pinch"}
+}
+
+def calculate_quantities(items, num_people):
+    """
+    Calculates the required quantity for a list of items based on number of people.
+    Returns a dictionary mapping item name to a formatted string.
+    """
+    quantities = {}
+    for item in items:
+        matched_key = None
+        # Try to find base quantity by checking if base item word is in the dataset item name
+        # Ex: item="whole milk" -> key "milk"
+        for key in BASE_QUANTITIES:
+            # Match exact word boundaries for better accuracy: 
+            if re.search(fr'\b{key}\b', item.lower()):
+                matched_key = key
+                break
+                
+        # Fallback to simple substring mapping if no direct word match
+        if not matched_key:
+            for key in BASE_QUANTITIES:
+                if key in item.lower() or item.lower() in key:
+                    matched_key = key
+                    break
+                
+        if matched_key:
+            base_amt = BASE_QUANTITIES[matched_key]["amount"]
+            unit = BASE_QUANTITIES[matched_key]["unit"]
+            total_amt = base_amt * num_people
+            
+            # Format unit text based on plurality
+            formatted_unit = unit
+            if unit == "unit" or unit == "units":
+                formatted_unit = "units" if total_amt > 1 else "unit"
+            elif unit == "clove" or unit == "cloves":
+                formatted_unit = "cloves" if total_amt > 1 else "clove"
+            elif unit == "half" or unit == "halves":
+                formatted_unit = "halves" if total_amt > 1 else "half"
+                
+            # Formatting integers nicer (no 1.0)
+            if isinstance(total_amt, int) or total_amt.is_integer():
+                quantities[item] = f"{int(total_amt)} {formatted_unit}"
+            else:
+                quantities[item] = f"{total_amt:g} {formatted_unit}"
+        else:
+            quantities[item] = "as required"
+            
+    return quantities
